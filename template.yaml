@@ -1,0 +1,26 @@
+## template.yaml
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template for slack bot app
+
+Resources:
+  SlackBotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: 'slack-bot'
+      CodeUri: slack_bot/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Timeout: 60
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: '/'
+            Method: ANY
+        ApiProxy:
+          Type: Api
+          Properties:
+            Path: '/{proxy+}'
+            Method: ANY

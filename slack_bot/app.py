@@ -1,3 +1,4 @@
+import awsgi
 import os
 import logging
 import sys
@@ -38,7 +39,7 @@ def create_conversational_chain():
     llm = ChatOpenAI(temperature=0.7, openai_api_key=OPENAI_API_KEY)
 
     memory = ConversationTokenBufferMemory(
-        llm=llm, return_messages=True, max_token_limit=500
+        llm=llm, return_messages=True, max_token_limit=150
     )
 
     prompt = ChatPromptTemplate.from_messages(
@@ -59,6 +60,11 @@ slack_app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 handler = SlackRequestHandler(slack_app)
 chain = create_conversational_chain()
 
+
+@app.route('/hello', methods=['GET'])
+def hello_get():
+    return {'msg': 'hello world'}
+
 # メッセージイベントのリスナーを設定
 @slack_app.event("app_mention")
 def command_handler(body, say):
@@ -68,19 +74,10 @@ def command_handler(body, say):
     # Slackに返答を送信
     say(text=chain.predict(input=text), thread_ts=thread_ts)
 
-@app.route('/hello', methods=['GET'])
-def hello_get():
-    return {'msg': 'hello world'}
-
-@app.route('/response', methods=['GET'])
-def response_get():
-    msg = chain.predict(input="hello")
-    return {'msg': msg}
-
 # Slackイベントのエンドポイント
 @app.route("/slack/events", methods=["POST"])
 def slack_events():
     return handler.handle(request)
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5002)
+def lambda_handler(event, context):
+    return awsgi.response(app, event, context)

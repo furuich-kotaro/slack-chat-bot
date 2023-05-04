@@ -1,0 +1,7 @@
+requests
+Flask
+aws-wsgi
+slack_bolt
+langchain
+tiktoken
+openai
