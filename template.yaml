@@ -12,7 +12,7 @@ Resources:
       CodeUri: slack_bot/
       Handler: app.lambda_handler
       Runtime: python3.9
-      Timeout: 60
+      Timeout: 180
       Events:
         ApiRoot:
           Type: Api

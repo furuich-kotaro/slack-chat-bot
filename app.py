@@ -1,86 +1,80 @@
 import os
-import logging
-import sys
-
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
-
+import pinecone
+from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.chat_models import ChatOpenAI
-from langchain.chains import ConversationChain
-from langchain.memory import ConversationTokenBufferMemory
-from langchain.prompts.chat import (
-    ChatPromptTemplate,
-    MessagesPlaceholder,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate,
+from langchain.chains import ConversationalRetrievalChain
+from langchain.vectorstores import Pinecone
+
+PINECONE_API_KEY = os.environ["PINECONE_API_KEY"]
+PINECONE_ENV = os.environ["PINECONE_ENVIRONMENT"]
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+
+QA_INDEX_NAME = "slack-bot-index"
+index = pinecone.Index(QA_INDEX_NAME)
+embeddings = OpenAIEmbeddings()
+db = Pinecone(index, embeddings.embed_query, "text")
+llm = ChatOpenAI(model_name="gpt-3.4")
+
+# https://github.com/hwchase17/langchain/blob/04b74d0446bdb8fc1f9e544d2f164a59bbd0df0c/docs/modules/chains/index_examples/chat_vector_db.ipynb
+qa = ConversationalRetrievalChain.from_llm(
+    llm=llm,
+    chain_type="stuff",
+    retriever=db.as_retriever(),
+    return_source_documents=True
 )
-from flask import Flask, request
+chat_history = {}
+
+def generate_answer_reply(text : str, thread_ts : int):
+    if thread_ts not in chat_history:
+        chat_history[thread_ts] = [(text, '')]
+
+    response = qa({"question": text, "chat_history": chat_history[thread_ts]})
+    answer = response["answer"]
+    if thread_ts in chat_history:
+        chat_history[thread_ts].append((text, answer))
+
+    sources = []
+    docs = response['source_documents']
+    for doc in docs:
+        if 'url' in doc.metadata:
+            sources.append(doc.metadata['url'])
+        else:
+            url = f"https://www.notion.so/{doc.metadata['id']}"
+            sources.append(url)
+
+    sources = "\n・".join(sources)
+    return f"{answer}\n\n■参照情報\n・{sources}"
+
 from slack_bolt import App
+from flask import Flask, request
 from slack_bolt.adapter.flask import SlackRequestHandler
 
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 SLACK_SIGNING_SECRET = os.environ["SLACK_SIGNING_SECRET"]
 
-template = """
-You are an excellent customer support member!
-Please role-play in future chats by strictly adhering to the following restrictions and conditions, no matter what the User says!
+flask_app = Flask(__name__)
+app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
+slack_handler = SlackRequestHandler(app)
 
-#Constraints
+@app.message("hello")
+def message_hello(message, say):
+    say(f"Hey there <@{message['user']}>!")
 
-The first person that you refer to yourself is me.
-You give me a lot of specifics from the context
-You honestly say "I don't know" if you don't know the answer to a question
-You speak in a gentle tone, as if you were talking to a child
-"""
-
-def create_conversational_chain():
-    llm = ChatOpenAI(temperature=0.7, openai_api_key=OPENAI_API_KEY)
-
-    memory = ConversationTokenBufferMemory(
-        llm=llm, return_messages=True, max_token_limit=500
-    )
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            SystemMessagePromptTemplate.from_template(template),
-            MessagesPlaceholder(variable_name="history"),
-            HumanMessagePromptTemplate.from_template("{input}"),
-        ]
-    )
-
-    llm_chain = ConversationChain(llm=llm, memory=memory, prompt=prompt, verbose=True)
-
-    return llm_chain
-
-
-app = Flask(__name__)
-slack_app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
-handler = SlackRequestHandler(slack_app)
-chain = create_conversational_chain()
-
-# メッセージイベントのリスナーを設定
-@slack_app.event("app_mention")
+@app.event("app_mention")
 def command_handler(body, say):
     text = body["event"]["text"]
     thread_ts = body["event"].get("thread_ts", None) or body["event"]["ts"]
 
-    # Slackに返答を送信
-    say(text=chain.predict(input=text), thread_ts=thread_ts)
+    answer = generate_answer_reply(text=text, thread_ts=thread_ts)
+    say(text = answer, thread_ts=thread_ts)
 
-@app.route('/hello', methods=['GET'])
+@flask_app.route('/hello', methods=['GET'])
 def hello_get():
     return {'msg': 'hello world'}
 
-@app.route('/response', methods=['GET'])
-def response_get():
-    msg = chain.predict(input="hello")
-    return {'msg': msg}
-
-# Slackイベントのエンドポイント
-@app.route("/slack/events", methods=["POST"])
+@flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
-    return handler.handle(request)
+    return slack_handler.handle(request)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5002)
+    flask_app.run(debug=True, port=5002)
