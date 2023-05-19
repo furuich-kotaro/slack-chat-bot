@@ -1,4 +1,5 @@
 import os
+import json
 import pinecone
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.chat_models import ChatOpenAI
@@ -12,8 +13,8 @@ pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 QA_INDEX_NAME = "slack-bot-index"
 index = pinecone.Index(QA_INDEX_NAME)
 embeddings = OpenAIEmbeddings()
-db = Pinecone(index, embeddings.embed_query, "text")
-llm = ChatOpenAI(model_name="gpt-3.4")
+db = Pinecone(index, embeddings.embed_query, "text", namespace="custom-csv-loader")
+llm = ChatOpenAI(model_name="gpt-4")
 
 # https://github.com/hwchase17/langchain/blob/04b74d0446bdb8fc1f9e544d2f164a59bbd0df0c/docs/modules/chains/index_examples/chat_vector_db.ipynb
 qa = ConversationalRetrievalChain.from_llm(
@@ -28,7 +29,7 @@ def generate_answer_reply(text : str, thread_ts : int):
     if thread_ts not in chat_history:
         chat_history[thread_ts] = [(text, '')]
 
-    response = qa({"question": text, "chat_history": chat_history[thread_ts]})
+    response = qa({"question": text, "chat_history": []})
     answer = response["answer"]
     if thread_ts in chat_history:
         chat_history[thread_ts].append((text, answer))
@@ -36,11 +37,11 @@ def generate_answer_reply(text : str, thread_ts : int):
     sources = []
     docs = response['source_documents']
     for doc in docs:
-        if 'url' in doc.metadata:
-            sources.append(doc.metadata['url'])
-        else:
-            url = f"https://www.notion.so/{doc.metadata['id']}"
-            sources.append(url)
+        if 'url' in doc.metadata: # check if url exists
+            sources.append(doc.metadata['url']) # append url
+        # else: # if url does not exist
+        #     url = f"https://www.notion.so/{doc.metadata['id']}" # create url
+        #     sources.append(url) # append url
 
     sources = "\n・".join(sources)
     return f"{answer}\n\n■参照情報\n・{sources}"

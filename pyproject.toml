@@ -11,10 +11,11 @@ python = "^3.9"
 flask = "^2.3.2"
 aws-wsgi = "^0.2.7"
 slack-bolt = "^1.18.0"
-langchain = "0.0.160"
+langchain = "^0.0.173"
 openai = "^0.27.6"
 requests = "2.28.1"
 pinecone-client = "^2.2.1"
+pinecone-text = "^0.4.2"
 
 
 [build-system]

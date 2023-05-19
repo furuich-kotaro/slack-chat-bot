@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from llama_index import download_loader
 from langchain.docstore.document import Document
 from langchain.vectorstores import Pinecone
+from langchain.embeddings.openai import OpenAIEmbeddings
 
 intercom_access_token = os.environ["INTERCOM_TOKEN"]
 IntercomReader = download_loader("IntercomReader")
@@ -27,5 +28,9 @@ for article in articles:
     metadata = {key: str() if value is None else value for key, value in metadata.items()}
     docs.append(Document(page_content=body, metadata=metadata))
 
+PINECONE_API_KEY = os.environ["PINECONE_API_KEY"]
+PINECONE_ENV = os.environ["PINECONE_ENVIRONMENT"]
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+
 embeddings = OpenAIEmbeddings()
-db = Pinecone.from_documents(docs, embeddings, index_name="slack-bot-index")
+db = Pinecone.from_documents(docs, embeddings, index_name="slack-bot-index", namespace="custom-csv-loader")

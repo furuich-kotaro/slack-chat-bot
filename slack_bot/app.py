@@ -13,7 +13,7 @@ pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 QA_INDEX_NAME = "slack-bot-index"
 index = pinecone.Index(QA_INDEX_NAME)
 embeddings = OpenAIEmbeddings()
-db = Pinecone(index, embeddings.embed_query, "text")
+db = Pinecone(index, embeddings.embed_query, "text", namespace="custom-csv-loader")
 llm = ChatOpenAI(model_name="gpt-4")
 
 # https://github.com/hwchase17/langchain/blob/04b74d0446bdb8fc1f9e544d2f164a59bbd0df0c/docs/modules/chains/index_examples/chat_vector_db.ipynb
@@ -30,6 +30,7 @@ def generate_answer_reply(text : str, thread_ts : int):
         chat_history[thread_ts] = [(text, '')]
 
     response = qa({"question": text, "chat_history": chat_history[thread_ts]})
+    return response["answer"]
     answer = response["answer"]
     if thread_ts in chat_history:
         chat_history[thread_ts].append((text, answer))

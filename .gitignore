@@ -163,3 +163,4 @@ cython_debug/
 notion_index.json
 intercom_index.json
 llama_index_sample
+local/tmp
