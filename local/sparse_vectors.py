@@ -97,6 +97,7 @@ index.upsert(vectors=vectors, namespace=namespace, batch_size=batch_size)
 
 text = "管理者が松岡さんのワークスペースについて教えてください"
 embedding = embeddings.embed_query(text)
+input_ids = tokenizer([text])['input_ids']
 sparse_vectors = {}
 for token_ids in input_ids:
     indices = []

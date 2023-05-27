@@ -168,18 +168,29 @@ for m in res['matches']:
     print("----")
     print(m["metadata"]["text"])
 
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain
-from local.custome_hybrid_serch import CustomPineconeHybridSearchRetriever
+
+from langchain.embeddings.openai import OpenAIEmbeddings
+from pinecone_text.sparse import BM25Encoder
+import pinecone
+
+PINECONE_API_KEY = os.environ["PINECONE_API_KEY"]
+PINECONE_ENV = os.environ["PINECONE_ENVIRONMENT"]
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+index = pinecone.Index("slack-bot-index")
 
 embeddings = OpenAIEmbeddings()
-llm = ChatOpenAI(model_name="gpt-4")
-retriever = CustomPineconeHybridSearchRetriever(
-    embeddings=embeddings,
-    sparse_encoder=sparse_encoder,
-    index=index,
+sparse_encoder = BM25Encoder().default()
+
+text = "国貞商店について教えて"
+dense_embed = embeddings.embed_query(text)
+sparse_embed = sparse_encoder._encode_single_document(text)
+sparse_embed["values"] = [float(s1) for s1 in sparse_embed["values"]]
+res_2 = index.query(
     namespace="hybrid-search",
     top_k=5,
+    include_metadata=True,
+    vector=dense_embed[:200],
+    sparse_vectors=sparse_embed,
 )
 
 qa = ConversationalRetrievalChain.from_llm(
@@ -198,3 +209,5 @@ for doc in docs:
     # else:
     #     url = f"https://www.notion.so/{doc.metadata['id']}"
     #     sources.append(url)
+
+
